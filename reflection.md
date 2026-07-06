@@ -2,15 +2,54 @@
 
 ## 1. System Design
 
+Some Core actions it should be able to do:
+- Add/delete info of owner and pet
+- set constraints
+- edit task details
 **a. Initial design**
 
-- Briefly describe your initial UML design.
-- What classes did you include, and what responsibilities did you assign to each?
+My initial UML (see `diagrams/uml_draft.mmd`) uses four classes:
+
+- **Owner** — represents the person using the app. Holds their `name`,
+  `preferences`, a daily time budget (`available_minutes`), and a list of
+  `pets`. Responsible for managing pets (`add_pet`, `remove_pet`) and setting
+  constraints (`set_preference`, `set_available_time`).
+- **Pet** — the animal being cared for. Holds `name`, `species`, `breed`,
+  `age`, `notes`, and its own list of `tasks`. Responsible for managing its
+  care tasks (`add_task`, `remove_task`, `edit_task`, `list_tasks`).
+- **Task** — a single care activity (walk, feeding, meds, grooming). Holds
+  `title`, `duration_minutes`, `priority`, `category`, `frequency`,
+  `preferred_time`, and a `completed` status. Responsible for describing
+  itself, scoring its own priority, and tracking completion (`priority_score`,
+  `is_due_today`, `mark_complete`, `update`).
+- **Scheduler** — the "brain." Given an owner's constraints and pets' tasks,
+  it sorts, filters, and orders tasks into a daily plan and explains it
+  (`sort_tasks`, `filter_tasks`, `resolve_conflicts`, `build_plan`,
+  `explain_plan`).
+
+Relationships: an **Owner has one-or-more Pets**, a **Pet has zero-or-more
+Tasks** (composition — tasks belong to that pet), and the **Scheduler uses**
+the Owner's constraints and the Pets' Tasks to produce a plan. `Task` and
+`Pet` are Python dataclasses to keep the data objects clean.
 
 **b. Design changes**
 
-- Did your design change during implementation?
-- If yes, describe at least one change and why you made it.
+Yes. After reviewing the class skeleton I made a couple of changes to the
+`Scheduler`:
+
+1. Removed a duplicated constraint. `available_minutes` originally lived on
+   both `Owner` and `Scheduler`, which is two sources of truth for the same
+   fact and invites bugs when one changes and the other doesn't. The
+   `Scheduler` now takes the `Owner` and exposes `available_minutes` as a
+   read-only property that reads from the owner.
+2. **Preserved the Pet→Task link.** The `Scheduler` first took a flat
+   `list[Task]`, so once tasks from multiple pets were pooled it could no
+   longer tell which pet a task belonged to. It now pools `(pet, task)` pairs
+   so a multi-pet plan can label each item with its pet.
+3. **Cached the built plan.** `build_plan()` and `explain_plan()` were
+   independent, meaning `explain_plan()` would have to redo all the
+   sort/filter/conflict work. `build_plan()` now stores the result in
+   `self._plan` so `explain_plan()` reuses it instead of recomputing.
 
 ---
 
