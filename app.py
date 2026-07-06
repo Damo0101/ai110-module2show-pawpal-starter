@@ -17,6 +17,7 @@ if "owner" not in st.session_state:
     st.session_state.owner = Owner("Jordan", available_minutes=90)
 
 owner = st.session_state.owner
+scheduler = Scheduler(owner)
 
 # --- Owner + daily constraints -------------------------------------------------
 st.subheader("Owner")
@@ -76,7 +77,7 @@ else:
             preferred_time = st.text_input("Preferred time (HH:MM, optional)", value="")
 
         if st.form_submit_button("Add task"):
-            # Owner.add_pet's counterpart: Pet.add_task handles the new task.
+            # Pet.add_task handles the new task (mirrors Owner.add_pet for pets).
             target_pet.add_task(
                 Task(
                     task_title,
@@ -88,35 +89,84 @@ else:
             )
             st.success(f"Added '{task_title}' to {target_pet.name}.")
 
-# --- Current pets & tasks ------------------------------------------------------
+# --- Current tasks: conflicts, filters, sorted view ---------------------------
 st.divider()
-st.subheader("Current pets & tasks")
-if not owner.pets:
-    st.info("No pets yet.")
-for pet in owner.pets:
-    with st.expander(f"{pet.name} ({pet.species})", expanded=True):
-        if not pet.tasks:
-            st.caption("No tasks yet.")
-        else:
-            st.table(
-                [
-                    {
-                        "Task": t.title,
-                        "Duration (min)": t.duration_minutes,
-                        "Priority": t.priority,
-                        "Frequency": t.frequency,
-                        "Preferred": t.preferred_time or "—",
-                        "Done": "✅" if t.completed else "",
-                    }
-                    for t in pet.tasks
-                ]
-            )
+st.subheader("Today's tasks")
+
+if not owner.all_tasks():
+    st.info("No tasks yet — add some above.")
+else:
+    # Conflict warnings first, so a busy owner sees clashes immediately.
+    conflicts = scheduler.detect_conflicts()
+    if conflicts:
+        for warning in conflicts:
+            st.warning(f"⚠️ {warning} — consider moving one to another time.")
+    else:
+        st.success("No scheduling conflicts detected.")
+
+    pending = len(scheduler.filter_by_status(completed=False))
+    done = len(scheduler.filter_by_status(completed=True))
+    st.caption(f"{pending} pending · {done} completed")
+
+    # Filter controls, powered by the Scheduler's filter/sort methods.
+    fcol1, fcol2 = st.columns(2)
+    with fcol1:
+        pet_choice = st.selectbox(
+            "Filter by pet", ["All pets"] + [p.name for p in owner.pets]
+        )
+    with fcol2:
+        status_choice = st.radio(
+            "Show", ["All", "Pending", "Completed"], horizontal=True
+        )
+
+    pairs = scheduler.sort_by_time()  # ordered by preferred_time, untimed last
+    if pet_choice != "All pets":
+        pairs = [(p, t) for p, t in pairs if p.name == pet_choice]
+    if status_choice == "Pending":
+        pairs = [(p, t) for p, t in pairs if not t.completed]
+    elif status_choice == "Completed":
+        pairs = [(p, t) for p, t in pairs if t.completed]
+
+    if pairs:
+        st.table(
+            [
+                {
+                    "Time": task.preferred_time or "—",
+                    "Task": task.title,
+                    "Pet": pet.name,
+                    "Duration (min)": task.duration_minutes,
+                    "Priority": task.priority,
+                    "Frequency": task.frequency,
+                    "Done": "✅" if task.completed else "",
+                }
+                for pet, task in pairs
+            ]
+        )
+    else:
+        st.info("No tasks match this filter.")
+
+    # Mark tasks done — recurring tasks automatically roll over to the next date.
+    st.markdown("**Mark a task done** — daily/weekly tasks roll over automatically:")
+    for pet_idx, pet in enumerate(owner.pets):
+        for task_idx, task in enumerate(pet.tasks):
+            if not task.completed:
+                if st.button(
+                    f"✓ {task.title} — {pet.name}", key=f"done_{pet_idx}_{task_idx}"
+                ):
+                    upcoming = pet.complete_task(task)
+                    if upcoming is not None:
+                        st.success(
+                            f"Completed '{task.title}'. Next {upcoming.frequency} "
+                            f"occurrence added (due {upcoming.due_date})."
+                        )
+                    else:
+                        st.success(f"Completed '{task.title}'.")
+                    st.rerun()
 
 # --- Build schedule ------------------------------------------------------------
 st.divider()
 st.subheader("Build schedule")
 if st.button("Generate schedule", type="primary"):
-    scheduler = Scheduler(owner)
     try:
         plan = scheduler.build_plan()
     except ValueError:
@@ -127,6 +177,10 @@ if st.button("Generate schedule", type="primary"):
         if not plan:
             st.info("Nothing to schedule — add some tasks or increase available time.")
         else:
+            st.success(
+                f"Scheduled {len(plan)} task(s) within "
+                f"{owner.available_minutes} available minutes."
+            )
             st.markdown("### Today's Schedule")
             st.table(
                 [

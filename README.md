@@ -22,6 +22,30 @@ Your final app should:
 - Display the plan clearly (and ideally explain the reasoning)
 - Include tests for the most important scheduling behaviors
 
+## ✨ Features
+
+PawPal+ pairs a Streamlit UI with a tested Python logic layer
+(`pawpal_system.py`). Implemented features:
+
+- **Owner & pet management** — add pets to an owner and give each pet its own
+  care tasks (`Owner.add_pet`, `Pet.add_task`).
+- **Priority-aware daily planning** — builds a day plan that keeps the
+  highest-priority tasks that fit the owner's time budget, then explains the
+  choices (`Scheduler.build_plan`, `Scheduler.explain_plan`).
+- **Sort by priority** — orders tasks high→low priority, shorter first
+  (`Scheduler.sort_tasks`).
+- **Sort by time** — orders tasks chronologically by `preferred_time`, with
+  untimed tasks last (`Scheduler.sort_by_time`).
+- **Filtering** — view tasks for one pet or by completion status
+  (`Scheduler.filter_by_pet`, `Scheduler.filter_by_status`).
+- **Conflict warnings** — flags tasks scheduled at the same start time with a
+  non-crashing warning message (`Scheduler.detect_conflicts`).
+- **Conflict-free timeline** — the built plan places tasks in non-overlapping
+  slots, pushing clashes to the next free time (`Scheduler.resolve_conflicts`).
+- **Recurring tasks** — completing a daily/weekly task automatically creates the
+  next occurrence with an advanced due date via `timedelta`
+  (`Pet.complete_task`, `Task.next_occurrence`).
+
 ## Getting started
 
 ### Setup
@@ -123,12 +147,99 @@ not recur.
 
 ## 📸 Demo Walkthrough
 
-Describe your app in numbered steps so a reader can follow along without watching a video:
+Launch the app with `streamlit run app.py`.
 
-1. <!-- Describe this step -->
-2. <!-- Describe this step -->
-3. <!-- Describe this step -->
-4. <!-- Describe this step -->
-5. <!-- Add more steps as needed -->
+### Main UI features & user actions
 
-**Screenshot or video** *(optional)*: <!-- Insert a screenshot or link to a demo video here -->
+- **Owner section** — set the owner's name and the total minutes available for
+  care today (the scheduler's time budget).
+- **Add a pet** — enter a name, species, and breed to register a pet.
+- **Add a task** — pick a pet, then give the task a title, duration, priority,
+  frequency (daily/weekly/once), and an optional preferred time.
+- **Today's tasks** — see conflict warnings, filter by pet or completion status,
+  view tasks sorted by time, and mark tasks done (recurring ones roll over).
+- **Build schedule** — generate the day's plan as a table plus a written
+  explanation of why each task was chosen.
+
+### Example workflow
+
+1. Set **Time available today** to `90` minutes.
+2. **Add a pet**: `Mochi` (dog). Add a second pet: `Luna` (cat).
+3. **Add tasks** to Mochi — e.g. `Meds` (5 min, high, daily, 08:00),
+   `Evening walk` (30 min, high, 18:00) — and to Luna — `Litter box`
+   (5 min, medium, 08:00).
+4. In **Today's tasks**, PawPal+ shows a ⚠️ conflict warning because Meds and
+   Litter box are both at 08:00. Use the filters to view just Mochi's tasks or
+   only pending ones.
+5. Click **✓ Meds — Mochi** to complete it; because it's a daily task, a new
+   Meds instance is automatically added for the next day.
+6. Click **Generate schedule** to see today's ordered plan and the reasoning.
+
+### Key Scheduler behaviors shown
+
+- **Sorting** — the schedule is ordered by priority (build) and the task list by
+  time (`sort_by_time`).
+- **Filtering** — by pet (`filter_by_pet`) and completion status
+  (`filter_by_status`).
+- **Conflict warnings** — same-time tasks surface as non-blocking warnings
+  (`detect_conflicts`), while the built plan stays conflict-free
+  (`resolve_conflicts`).
+- **Recurring tasks** — completing a daily/weekly task spawns its next
+  occurrence (`Pet.complete_task` → `Task.next_occurrence`).
+
+### Sample CLI output (`python main.py`)
+
+The terminal demo exercises every Scheduler behavior end-to-end:
+
+```
+============================================
+  Today's Schedule for Jordan
+============================================
+  08:00  Meds               Mochi     5 min  [high]
+  08:05  Litter box         Luna      5 min  [medium]
+  08:10  Enrichment puzzle  Mochi    20 min  [low]
+  12:00  Lunch feeding      Mochi    10 min  [medium]
+  12:10  Play session       Luna     15 min  [low]
+  18:00  Evening walk       Mochi    30 min  [high]
+
+============================================
+  Tasks sorted by time (sort_by_time)
+============================================
+  08:00  Meds               (Mochi)
+  08:00  Litter box         (Luna)
+  12:00  Lunch feeding      (Mochi)
+  12:00  Play session       (Luna)
+  18:00  Evening walk       (Mochi)
+    —    Enrichment puzzle  (Mochi)
+
+============================================
+  Filter: only Mochi's tasks (filter_by_pet)
+============================================
+  Evening walk (Mochi)
+  Meds (Mochi)
+  Lunch feeding (Mochi)
+  Enrichment puzzle (Mochi)
+
+============================================
+  Filter: only unfinished tasks (filter_by_status)
+============================================
+  Evening walk (Mochi) — done=False
+  Meds (Mochi) — done=False
+  Lunch feeding (Mochi) — done=False
+  Enrichment puzzle (Mochi) — done=False
+  Litter box (Luna) — done=False
+  Play session (Luna) — done=False
+
+============================================
+  Conflict detection (detect_conflicts)
+============================================
+  ⚠️  Conflict at 08:00: Meds (Mochi), Litter box (Luna)
+  ⚠️  Conflict at 12:00: Lunch feeding (Mochi), Play session (Luna)
+
+============================================
+  Recurring task auto-rollover (complete_task)
+============================================
+  Before: 4 tasks, 'Meds' due 2026-07-05
+  Marked 'Meds' complete (done=True).
+  After:  5 tasks — next 'Meds' due 2026-07-06
+```
