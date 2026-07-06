@@ -97,17 +97,46 @@ Plan for Jordan: 6 of 7 due task(s) scheduled, using 75 of 90 available minutes.
 
 ```bash
 # Run the full test suite:
-pytest
+python -m pytest
 
 # Run with coverage:
 pytest --cov
 ```
 
+The suite in `tests/test_pawpal.py` covers the core behaviors of the logic
+layer:
+
+- **Task completion** — `mark_complete()` flips a task's status to done.
+- **Task addition** — adding a task increases a pet's task count.
+- **Sorting correctness** — `sort_by_time()` returns tasks in chronological
+  order, with untimed tasks last.
+- **Filtering** — `filter_by_pet()` / `filter_by_status()` return the right
+  subset of tasks.
+- **Conflict detection** — `detect_conflicts()` flags two tasks at the same
+  start time.
+- **Recurrence logic** — completing a daily task creates a new instance due the
+  next day, while a `once` task does not recur.
+
 Sample test output:
 
 ```
-# Paste your pytest output here
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-9.1.1, pluggy-1.6.0
+collected 7 items
+
+tests/test_pawpal.py::test_mark_complete_changes_status PASSED           [ 14%]
+tests/test_pawpal.py::test_adding_task_increases_pet_task_count PASSED   [ 28%]
+tests/test_pawpal.py::test_sort_by_time_orders_and_puts_untimed_last PASSED [ 42%]
+tests/test_pawpal.py::test_filter_by_pet_and_status PASSED               [ 57%]
+tests/test_pawpal.py::test_detect_conflicts_flags_same_time PASSED       [ 71%]
+tests/test_pawpal.py::test_completing_recurring_task_spawns_next_occurrence PASSED [ 85%]
+tests/test_pawpal.py::test_completing_once_task_does_not_recur PASSED    [100%]
+
+============================== 7 passed in 0.07s ==============================
 ```
+
+**Confidence Level: ⭐⭐⭐⭐☆ (4/5)** — all core behaviors pass; the main gap is
+duration-based overlap detection (see the tradeoff noted in `reflection.md`).
 
 ## 📐 Smarter Scheduling
 
