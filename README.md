@@ -87,14 +87,39 @@ Sample test output:
 
 ## 📐 Smarter Scheduling
 
-> Fill in once you've implemented scheduling logic.
+All scheduling logic lives in the `Scheduler` class in `pawpal_system.py`.
 
 | Feature | Method(s) | Notes |
 |---------|-----------|-------|
-| Task sorting | | e.g., by priority, duration |
-| Filtering | | e.g., skip tasks if time runs out |
-| Conflict handling | | e.g., overlapping time slots |
-| Recurring tasks | | e.g., daily vs. weekly |
+| Sort by priority | `Scheduler.sort_tasks()` | Orders due tasks by priority (high→low), then shorter duration first. |
+| Sort by time | `Scheduler.sort_by_time()` | Sorts by `preferred_time` ("HH:MM"); untimed tasks go last. |
+| Filter by time budget | `Scheduler.filter_tasks()` | Greedily keeps the highest-priority tasks that fit `available_minutes`. |
+| Filter by pet | `Scheduler.filter_by_pet(name)` | Returns only the named pet's tasks. |
+| Filter by status | `Scheduler.filter_by_status(completed)` | Returns only completed / unfinished tasks. |
+| Conflict detection | `Scheduler.detect_conflicts()` | Warns (does not crash) when tasks share the exact same `preferred_time`. |
+| Conflict resolution | `Scheduler.resolve_conflicts()` | Assigns non-overlapping start times; pushes clashing tasks to the next free slot. |
+| Recurring tasks | `Task.next_occurrence()`, `Pet.complete_task()` | Completing a daily/weekly task auto-creates the next instance (`due_date` advanced via `timedelta`). |
+
+### Sorting details
+
+`sort_by_time()` sorts `"HH:MM"` strings directly with a `sorted()` lambda key —
+because the strings are zero-padded, lexicographic order matches chronological
+order (`"08:00" < "13:30"`). Tasks with no `preferred_time` are sorted last.
+
+### Conflict handling
+
+`detect_conflicts()` is a lightweight, non-crashing check: it groups uncompleted
+tasks by exact start time and returns a warning string per shared slot. The
+actual daily plan is still built safely by `resolve_conflicts()`, which places
+tasks sequentially so nothing double-books.
+
+### Recurring tasks
+
+A `Task` carries a `frequency` (`daily` / `weekly` / `once`) and a `due_date`.
+Calling `Pet.complete_task(task)` marks it done and, for recurring tasks, appends
+a fresh copy via `Task.next_occurrence()` with `due_date` advanced by
+`timedelta(days=1)` (daily) or `timedelta(weeks=1)` (weekly). `once` tasks do
+not recur.
 
 ## 📸 Demo Walkthrough
 

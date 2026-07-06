@@ -57,13 +57,27 @@ Yes. After reviewing the class skeleton I made a couple of changes to the
 
 **a. Constraints and priorities**
 
-- What constraints does your scheduler consider (for example: time, priority, preferences)?
-- How did you decide which constraints mattered most?
+The scheduler considers three constraints: the owner's **available time**
+(`available_minutes`), each task's **priority** (high/medium/low), and each
+task's **preferred time** (`preferred_time`). Priority matters most: tasks are
+sorted highest-priority first, then the greedy `filter_tasks()` keeps as many
+as fit the time budget, so a busy owner always gets the essential care done
+(meds, feeding) before the nice-to-haves (enrichment). Completion status and
+frequency also act as filters — completed tasks and non-due tasks are excluded.
 
 **b. Tradeoffs**
 
-- Describe one tradeoff your scheduler makes.
-- Why is that tradeoff reasonable for this scenario?
+My conflict detection only checks for **exact start-time matches**
+(`Scheduler.detect_conflicts()` compares `preferred_time` strings), not
+overlapping durations. So a 30-minute 08:00 walk and an 08:15 feeding are *not*
+flagged as conflicting even though they overlap in real time. This tradeoff is
+reasonable here because the detector is meant as a lightweight *warning* to the
+owner, not a hard constraint — the actual timeline is still built safely by
+`resolve_conflicts()`, which pushes overlapping tasks to the next free slot so
+nothing double-books. Exact-match detection is simple, fast, and easy to
+explain; full interval-overlap checking would add complexity for a warning that
+the plan builder already handles. If I had more time I would upgrade the
+detector to compare `[start, start + duration)` intervals.
 
 ---
 

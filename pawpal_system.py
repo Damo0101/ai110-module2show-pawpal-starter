@@ -12,9 +12,13 @@ Class responsibilities:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import date, timedelta
 
 # How strongly to weight each priority when ordering tasks (higher = sooner).
 PRIORITY_SCORES = {"low": 1, "medium": 2, "high": 3}
+
+# How far ahead the next occurrence of a recurring task lands.
+RECURRENCE_DELTAS = {"daily": timedelta(days=1), "weekly": timedelta(weeks=1)}
 
 
 def _to_minutes(clock: str) -> int:
@@ -40,6 +44,7 @@ class Task:
     frequency: str = "daily"          # "daily" | "weekly" | "once"
     preferred_time: str | None = None  # e.g. "08:00"
     completed: bool = False
+    due_date: date | None = None       # which day this occurrence is for
 
     def priority_score(self) -> int:
         """Return a numeric weight for this task's priority (high=3 ... low=1)."""
@@ -59,6 +64,23 @@ class Task:
     def mark_complete(self) -> None:
         """Mark this task as done for today."""
         self.completed = True
+
+    def next_occurrence(self) -> Task | None:
+        """Return a fresh, uncompleted copy for the next date, or None if not recurring."""
+        delta = RECURRENCE_DELTAS.get(self.frequency)
+        if delta is None:  # "once" (or any non-recurring frequency)
+            return None
+        base = self.due_date or date.today()
+        return Task(
+            title=self.title,
+            duration_minutes=self.duration_minutes,
+            priority=self.priority,
+            category=self.category,
+            frequency=self.frequency,
+            preferred_time=self.preferred_time,
+            completed=False,
+            due_date=base + delta,
+        )
 
     def update(self, changes: dict) -> None:
         """Apply a dict of field changes to this task."""
@@ -96,6 +118,16 @@ class Pet:
     def list_tasks(self) -> list[Task]:
         """Return a copy of this pet's task list."""
         return list(self.tasks)
+
+    def complete_task(self, task: Task) -> Task | None:
+        """Mark a task done; if it recurs, append and return its next occurrence."""
+        if task not in self.tasks:
+            raise ValueError("Task does not belong to this pet")
+        task.mark_complete()
+        upcoming = task.next_occurrence()
+        if upcoming is not None:
+            self.tasks.append(upcoming)
+        return upcoming
 
 
 @dataclass
@@ -161,6 +193,43 @@ class Scheduler:
             self._due_tasks(),
             key=lambda pt: (-pt[1].priority_score(), pt[1].duration_minutes),
         )
+
+    def sort_by_time(self) -> list[tuple[Pet, Task]]:
+        """Return (pet, task) pairs sorted by preferred_time; untimed tasks go last.
+
+        'HH:MM' strings sort correctly with a plain lambda key because they are
+        zero-padded (e.g. '08:00' < '13:30' lexicographically).
+        """
+        return sorted(
+            self.tasks,
+            key=lambda pt: (pt[1].preferred_time is None, pt[1].preferred_time or ""),
+        )
+
+    def filter_by_pet(self, pet_name: str) -> list[tuple[Pet, Task]]:
+        """Return (pet, task) pairs belonging to the named pet."""
+        return [(pet, task) for pet, task in self.tasks if pet.name == pet_name]
+
+    def filter_by_status(self, completed: bool = False) -> list[tuple[Pet, Task]]:
+        """Return (pet, task) pairs matching the given completion status."""
+        return [(pet, task) for pet, task in self.tasks if task.completed == completed]
+
+    def detect_conflicts(self) -> list[str]:
+        """Return warnings for uncompleted tasks sharing the exact same preferred_time.
+
+        Lightweight strategy: compares exact 'HH:MM' start times only (not
+        overlapping durations) and returns warning strings rather than raising.
+        """
+        slots: dict[str, list[tuple[Pet, Task]]] = {}
+        for pet, task in self.tasks:
+            if task.preferred_time and not task.completed:
+                slots.setdefault(task.preferred_time, []).append((pet, task))
+
+        warnings: list[str] = []
+        for time_str, entries in sorted(slots.items()):
+            if len(entries) > 1:
+                names = ", ".join(f"{task.title} ({pet.name})" for pet, task in entries)
+                warnings.append(f"Conflict at {time_str}: {names}")
+        return warnings
 
     def filter_tasks(self) -> list[tuple[Pet, Task]]:
         """Greedily keep the highest-priority tasks that fit the time budget."""
